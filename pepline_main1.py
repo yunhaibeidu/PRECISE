@@ -13,7 +13,10 @@ sys.path.insert(0, project_root)
 # 导入酶切相关模块  
 from src.protease_rules import ENZYME_FUNCTIONS  
 from src.protein_digestion import process_protein_digestion  
-from src.prepare_features import PeptideFeaturePreparer  
+#from src.prepare_features import PeptideFeaturePreparer  
+
+sys.path.insert(0, os.path.join(project_root, 'feature'))
+from prepare_features import PeptideFeaturePreparer
 
 # 日志配置  
 logging.basicConfig(  
