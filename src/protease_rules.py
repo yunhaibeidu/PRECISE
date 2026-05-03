@@ -171,7 +171,7 @@ def chymo_low(seq: str, seq_len: int) -> List[int]:
     """
     cleavage = []
     
-    for i in range(seq_len):
+    for i in range(seq_len - 1):  # 直接限制范围，避免重复判断
         # 低特异性：扩展切割位点
         specific_conditions = [
             (seq[i] in ['F', 'L', 'Y'] and seq[i+1] != 'P'),
@@ -181,10 +181,9 @@ def chymo_low(seq: str, seq_len: int) -> List[int]:
              seq[i] != 'P' and seq[i] != 'W')
         ]
         
-        if i < seq_len - 1:
-            for condition in specific_conditions:
-                if condition:
-                    cleavage.append(i)
+        # 检查是否满足任一条件
+        if any(specific_conditions):
+            cleavage.append(i)
     
     return cleavage
 
@@ -257,6 +256,55 @@ def Proteinase_K(seq: str, seq_len: int) -> List[int]:
     
     return cleavage  
 
+#def Papain(seq: str, seq_len: int) -> List[int]:  
+  #  """  
+  #  木瓜蛋白酶切割位点识别  
+    
+   # 基于MEROPS数据库验证的切割规则：  
+   # 1. 主要在R、F、L、G后切割  
+   # 2. 实验证实酶切位点可靠性（Melo et al., 2001）  
+ #   """  
+   # cleavage = []  
+    
+  #  # 确认的切割规则：在R、F、L、G后切割  
+  #  target_residues = ['R', 'F', 'L', 'G']  
+    
+  #  for i in range(seq_len):  
+  #      if i < seq_len - 1:  
+   #         # 在R、F、L、G后切割  
+       #     if seq[i] in target_residues:  
+   #             cleavage.append(i)  
+    
+  #  return cleavage  
+
+def Papain(seq: str, seq_len: int) -> List[int]:
+    """
+    木瓜蛋白酶切割位点识别
+
+    基于MEROPS数据库（C01.001）验证的切割规则（已修订）：
+    1. 主要P1切割位点：R（Arg）、K（Lys）、G（Gly）
+       - 来源：MEROPS C01.001实验记录的P1位点高频残基
+         (Rawlings et al., 2018, Nucleic Acids Res, 46, D624-D632)
+       - 数据库地址：https://www.ebi.ac.uk/merops/
+    2. 修订说明：
+       - 原规则中F（Phe）和L（Leu）的P1位点证据不充分，
+         F在MEROPS P1实验记录中频率较低，
+         L主要出现在P1'位点而非P1位点，
+         故本次修订将二者从规则中移除。
+    """
+    cleavage = []
+
+    # 修订后的P1切割规则：R、K、G（基于MEROPS C01.001实验记录）
+    target_residues = ['R', 'K', 'G']
+
+    for i in range(seq_len):
+        if i < seq_len - 1:
+            # 在R、K、G后切割（P1位点）
+            if seq[i] in target_residues:
+                cleavage.append(i)
+
+    return cleavage
+
 def apply_enzymes(seq: str, enzymes: List[Callable]) -> List[int]:
     """
     应用多种酶切酶
@@ -301,6 +349,31 @@ def digest_protein(seq: str, enzymes: List[Callable]) -> List[str]:
     
     return peptides
 
+def Alcalase(seq: str, seq_len: int) -> List[int]:  
+    """  
+    S8.001碱性蛋白酶(Subtilisin Carlsberg/Alcalase)切割位点识别  
+    
+    基于MEROPS热图的高分值位点:  
+    1. 主要切割位点: L(8分), A(6分)  
+    2. 次要切割位点: S, Y(5分)  
+    3. 实验确认位点: K(组合肽数据)  
+    
+    来源: Bacillus licheniformis (MEROPS S8.001)  
+    """  
+    cleavage = []  
+    
+    # 仅限最高分值和实验确认的氨基酸  
+    target_residues = ['L', 'A', 'S', 'Y', 'K']  
+    
+    for i in range(seq_len):  
+        if i < seq_len - 1:  
+            # 在目标氨基酸后切割  
+            if seq[i] in target_residues:  
+                cleavage.append(i)  
+    
+    return cleavage  
+
+
 # 可用的酶切函数
 ENZYME_FUNCTIONS = {
     'Trypsin': Trypsin,
@@ -311,5 +384,8 @@ ENZYME_FUNCTIONS = {
   #  'GluC': GluC,
  #   'AspN': AspN,
  #   'LysC': LysC
-    'Proteinase_K': Proteinase_K
+    'Proteinase_K': Proteinase_K,
+    'Papain': Papain,
+    'Alcalase': Alcalase
+    
 }
