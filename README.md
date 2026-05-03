@@ -26,15 +26,17 @@ PRECISE 是一个综合性蛋白质分析平台，专注于蛋白酶切模拟、
   - 学习率自适应调节  
   - 模拟退火算法 (用于酶组合优化)  
 
-## 开发时间线  
-[此部分将在后续更新]  
+#快速开始
+# 1. 克隆项目
+git clone https://github.com/你的用户名/你的仓库名.git
+cd 你的仓库名
 
-## 作者  
-zhong jun - 主要开发者  
+# 2. 创建并激活环境
+conda env create -f webcreat.yaml
+conda activate webcreat
 
-## 使用方法  
-### 环境要求  
-- Python 3.11+  
+# 3. 启动应用
+streamlit run streamlit_main_v5fixerro1.py
 - 依赖库详见 requirements.txt  
 
 ### 快速开始  
