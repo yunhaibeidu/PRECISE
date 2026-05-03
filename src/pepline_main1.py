@@ -7,7 +7,7 @@ import logging
 from typing import List, Dict, Optional, Union  
 
 # 添加项目根目录到系统路径  
-project_root = r"F:\硕士阶段任务\毕业论文2\peptide_prediction"  
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)  
 
 # 导入酶切相关模块  
@@ -75,11 +75,10 @@ class BiLSTMModel(nn.Module):
         return output.squeeze()  
 
 class PeptideActivityPredictor:  
-    def __init__(  
-        self,  
-        model_paths: Optional[Dict[str, str]] = None,  
-        base_dir: str = r'F:\硕士阶段任务\毕业论文2\result_comparasion\all'  
-    ):  
+    def __init__(self, model_paths=None, base_dir: str = None):  
+            if base_dir is None:
+                 base_dir = os.path.join(project_root, 'model')  
+                
         # 默认模型文件路径  
         if model_paths is None:  
             model_paths = {  
@@ -95,8 +94,8 @@ class PeptideActivityPredictor:
         
         # 特征准备器  
         self.feature_preparer = PeptideFeaturePreparer(  
-            chemical_scaler_path=os.path.join(project_root, 'src', 'chemical_scaler.joblib'),  
-            sequence_scaler_path=os.path.join(project_root, 'src', 'sequence_scaler.joblib')  
+            chemical_scaler_path=os.path.join(project_root, 'feature', 'chemical_scaler.joblib'),  
+            sequence_scaler_path=os.path.join(project_root, 'feature', 'sequence_scaler.joblib')  
         )  
         
         # 模型加载  
