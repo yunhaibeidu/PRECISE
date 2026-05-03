@@ -106,8 +106,8 @@ streamlit run streamlit_main_v5fixerro1.py
 
 Acknowledgements | 致谢
 Special thanks to Lv Shangyu for the support and assistance provided throughout the development of this project.
-
 特别感谢 Lv Shangyu 在本项目开发过程中提供的支持与帮助。
+
 ---
 
 ## License | 开源协议
