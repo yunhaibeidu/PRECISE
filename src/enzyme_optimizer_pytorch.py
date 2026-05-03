@@ -116,8 +116,8 @@ class BiLSTMModel(nn.Module):
 # Peptide Activity Predictor Class  
 class PeptideActivityPredictor:  
     def __init__(self, model_paths=None, base_dir: str = None):  
-            if base_dir is None:
-                base_dir = os.path.join(project_root, 'model')   
+        if base_dir is None:
+            base_dir = os.path.join(project_root, 'model')   
 
         # Default model file paths  
         if model_paths is None:  
