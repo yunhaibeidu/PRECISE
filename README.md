@@ -65,7 +65,7 @@ Optimizes enzyme combinations for target bioactivities using a simulated anneali
 
 ### Requirements | 环境要求
 - Python 3.11+
-- See `environment.yml` for full dependencies | 依赖库详见 `environment.yml`
+- See webcreat.yaml for full dependencies | 依赖库详见 webcreat.yaml
 
 ### Quick Start | 快速开始
 
@@ -74,13 +74,20 @@ Optimizes enzyme combinations for target bioactivities using a simulated anneali
 git clone https://github.com/yourname/PRECISE.git
 cd PRECISE
 
-# 2. Create and activate environment | 创建并激活环境
-conda env create -f environment.yml
+# 2. Create and activate webcreat | 创建并激活环境
+conda env create -f webcreat.yml
 conda activate webcreat
 
 # 3. Launch the application | 启动应用
+cmd
+cd your_work_filepath
 streamlit run streamlit_main_v5fixerro1.py
+# 4. stop the application | 终止应用
+crtl c (Press before closing the page.) 
 ```
+
+
+
 
 ---
 
