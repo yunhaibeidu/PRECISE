@@ -47,9 +47,9 @@ sys.path.insert(0, os.path.join(project_root, 'feature'))
 from prepare_features import PeptideFeaturePreparer
 
 # 定义输出文件夹  
-#OUTPUT_DIR = r"F:\硕士阶段任务\毕业论文2\result_enzy"  
+#tmpdir = r"F:\硕士阶段任务\毕业论文2\result_enzy"  
 # 确保输出文件夹存在  
-#os.makedirs(OUTPUT_DIR, exist_ok=True)  
+#os.makedirs(tmpdir, exist_ok=True)  
 import tempfile
 tmpdir = tempfile.gettempdir()
 
@@ -546,7 +546,7 @@ class SimulatedAnnealingOptimizer:
         
         # If no save path specified, use default  
         if not save_path:  
-            save_path = os.path.join(OUTPUT_DIR, f"enzyme_optimization_history_{target_activity}.png")  
+            save_path = os.path.join(tmpdir, f"enzyme_optimization_history_{target_activity}.png")  
             
         plt.savefig(save_path, dpi=300, bbox_inches='tight')  
         logging.info(f"Optimization history saved to: {save_path}")  
@@ -750,7 +750,7 @@ def optimize_enzyme_combination(
         Dict: 优化结果  
     """  
     # 确保输出目录存在  
-    os.makedirs(OUTPUT_DIR, exist_ok=True)  
+    os.makedirs(tmpdir, exist_ok=True)  
     
     # 初始化肽活性预测器  
     try:  
@@ -786,7 +786,7 @@ def optimize_enzyme_combination(
     # 绘制优化历史  
     history_path = optimizer.plot_fitness_history(  
         target_activity,  
-        os.path.join(OUTPUT_DIR, f"enzyme_optimization_history_{target_activity}.png")  
+        os.path.join(tmpdir, f"enzyme_optimization_history_{target_activity}.png")  
     )  
     result["history_plot_path"] = history_path  
     
@@ -1082,7 +1082,7 @@ def export_optimization_results(
         Tuple[str, str]: Paths to the output Excel and PDF files  
     """  
     # Ensure output directory exists  
-    os.makedirs(OUTPUT_DIR, exist_ok=True)  
+    os.makedirs(tmpdir, exist_ok=True)  
     
     # Get target activity  
     target_activity = result["target_activity"]  
@@ -1092,9 +1092,9 @@ def export_optimization_results(
     
     # If Excel output filename not specified, generate one  
     if not output_excel:  
-        output_excel = os.path.join(OUTPUT_DIR, f"enzyme_optimization_results_{target_activity}_{timestamp}.xlsx")  
+        output_excel = os.path.join(tmpdir, f"enzyme_optimization_results_{target_activity}_{timestamp}.xlsx")  
     else:  
-        output_excel = os.path.join(OUTPUT_DIR, output_excel)  
+        output_excel = os.path.join(tmpdir, output_excel)  
     
     # Export to Excel  
     with pd.ExcelWriter(output_excel) as writer:  
@@ -1217,9 +1217,9 @@ def export_optimization_results(
     
     # Generate PDF report if requested  
     if output_pdf is None:  
-        output_pdf = os.path.join(OUTPUT_DIR, f"enzyme_optimization_report_{target_activity}_{timestamp}.pdf")  
+        output_pdf = os.path.join(tmpdir, f"enzyme_optimization_report_{target_activity}_{timestamp}.pdf")  
     else:  
-        output_pdf = os.path.join(OUTPUT_DIR, output_pdf)  
+        output_pdf = os.path.join(tmpdir, output_pdf)  
     
     try:  
         # 使用完整PDF报告  
@@ -1241,7 +1241,7 @@ def export_optimization_results(
 # 主函数: 用于VSCode调试  
 if __name__ == "__main__":  
     print("==== Food Bioactive Peptide Simulated Annealing Optimizer ====")  
-    print(f"Output directory: {OUTPUT_DIR}")  
+    print(f"Output directory: {tmpdir}")  
     
     # Test protein sequence - Apolipoprotein A1 (ApoA1)  
     test_sequence = "MKVLWAALLVTFLAGCQAKVEQAVETEPEPELRQQTEWQSGQRWELALGRFWDYLRWVQTLSEQVQEELLSSQVTQELRALMDETMKELKAYKSELEEQLTPVAEETRARLSKELQAAQARLGADVLASHGRLVQYRGEVQAMLGQSTEELRVRLASHLRKLRKRLLRDADDLQKRLAVYQAGAREGAERGLSAIRERLGPLVEQGRVRAATVGSLAGQPLQERAQAWGERLRARMEEMGSRTRDRLDEVKEQVAEVRAKLEEQAQQRLEEQLGMDTQKEIMDLQARKASIRAQDVHEPSEWRNRLLLLETQAGEGN"  
