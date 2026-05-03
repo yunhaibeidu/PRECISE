@@ -54,7 +54,7 @@ def _patch_torch_classes():
 _patch_torch_classes()
 
 
-sys.path.insert(0, r"F:/硕士阶段任务/毕业论文2/peptide_prediction/src/")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 
 # 页面配置 
