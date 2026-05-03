@@ -28,7 +28,7 @@ plt.rcParams.update({
 })  
 
 # 添加项目根目录到系统路径  
-project_root = r"F:\硕士阶段任务\毕业论文2\peptide_prediction"  
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)  
 
 # 添加安全的全局变量  
@@ -37,15 +37,21 @@ torch.serialization.add_safe_globals([np.float64, np.ndarray, np.generic])
 # 导入项目模块  
 from src.protease_rules import ENZYME_FUNCTIONS, digest_protein  
 from src.protein_digestion import process_protein_digestion  
-from src.prepare_features import PeptideFeaturePreparer  
+#from src.prepare_features import PeptideFeaturePreparer  
+
 
 # 导入肽活性预测模型  
 import torch.nn as nn  
 
+sys.path.insert(0, os.path.join(project_root, 'feature'))
+from prepare_features import PeptideFeaturePreparer
+
 # 定义输出文件夹  
-OUTPUT_DIR = r"F:\硕士阶段任务\毕业论文2\result_enzy"  
+#OUTPUT_DIR = r"F:\硕士阶段任务\毕业论文2\result_enzy"  
 # 确保输出文件夹存在  
-os.makedirs(OUTPUT_DIR, exist_ok=True)  
+#os.makedirs(OUTPUT_DIR, exist_ok=True)  
+import tempfile
+tmpdir = tempfile.gettempdir()
 
 # 日志配置  
 logging.basicConfig(  
@@ -109,11 +115,10 @@ class BiLSTMModel(nn.Module):
 
 # Peptide Activity Predictor Class  
 class PeptideActivityPredictor:  
-    def __init__(  
-        self,   
-        model_paths: Optional[Dict[str, str]] = None,  
-        base_dir: str = r'F:\硕士阶段任务\毕业论文2\result_comparasion\all'  
-    ):  
+    def __init__(self, model_paths=None, base_dir: str = None):  
+            if base_dir is None:
+                base_dir = os.path.join(project_root, 'model')   
+
         # Default model file paths  
         if model_paths is None:  
             model_paths = {  
@@ -129,8 +134,8 @@ class PeptideActivityPredictor:
         
         # Feature preparer  
         self.feature_preparer = PeptideFeaturePreparer(  
-            chemical_scaler_path=os.path.join(project_root, 'src', 'chemical_scaler.joblib'),  
-            sequence_scaler_path=os.path.join(project_root, 'src', 'sequence_scaler.joblib')  
+            chemical_scaler_path=os.path.join(project_root, 'feature', 'chemical_scaler.joblib'),  
+            sequence_scaler_path=os.path.join(project_root, 'feature', 'sequence_scaler.joblib')  
         )  
         
         # Load models  
