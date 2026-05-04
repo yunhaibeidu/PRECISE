@@ -81,9 +81,9 @@ conda activate webcreat
 # 3. Launch the application | 启动应用
 cmd
 cd your_work_filepath
-streamlit run streamlit_main_v5fixerro1.py
+streamlit run peptide_streamlit_main_v5_en.py
 # 4. stop the application | 终止应用
-crtl c (Press before closing the page.) 
+crtl c (Press before closing the page.) or push "stop"
 ```
 
 
