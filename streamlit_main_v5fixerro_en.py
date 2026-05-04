@@ -1,0 +1,595 @@
+import sys
+import asyncio
+import os
+import pandas as pd 
+#from rdkit import Chem 
+#from rdkit.Chem import Draw 
+
+from pepline_main1 import PeptideAnalysisPlatform
+import streamlit as st
+
+import re
+# 导入序列
+import torch
+from enzyme_optimizer_pytorch import optimize_enzyme_combination
+from enzyme_optimizer_pytorch import export_optimization_results
+from enzyme_optimizer_pytorch import generate_pdf_report
+import io
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+
+import signal
+import types
+import altair as alt
+
+
+# 禁用Streamlit的文件监视器
+os.environ["STREAMLIT_SERVER_WATCH_DIRS"] = "false"
+os.environ["STREAMLIT_SERVER_ENABLE_STATIC_SERVING"] = "false"
+
+# PyTorch环境变量
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
+# 确保有事件循环
+try:
+    loop = asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+# 添加这个函数来解决torch.classes.__path__的问题
+
+def _patch_torch_classes():
+    import torch
+    if not hasattr(torch.classes, '__path__') or not isinstance(torch.classes.__path__, types.SimpleNamespace):
+        torch.classes.__path__ = types.SimpleNamespace()
+    if not hasattr(torch.classes.__path__, '_path'):
+        torch.classes.__path__._path = []
+
+# 应用补丁
+_patch_torch_classes()
+
+
+sys.path.insert(0, r"F:/硕士阶段任务/毕业论文2/peptide_prediction/src/")
+
+
+# 页面配置 
+st.set_page_config( 
+    page_title="Peptide analysis platform -PRIECES",
+    page_icon="🧬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+
+
+def shutdown_app():
+    """关闭应用的执行函数"""
+    os.kill(os.getpid(), signal.SIGTERM)  # 发送终止信号
+
+# ====================== 页面布局 ======================
+# 在页面右上角添加关闭按钮（使用列布局定位）
+cols = st.columns([0.8, 0.2])
+with cols[1]:
+    if st.button("⛔ One-click close", type="secondary", help="Completely close the current application"):
+        shutdown_app()
+# 初始化平台 
+@st.cache_resource  
+def init_platform():
+    return PeptideAnalysisPlatform()
+ 
+platform = init_platform()
+
+# 页面标题 
+st.title(f" Intelligent Peptide Analysis System (2025 Edition)")
+st.markdown("---") 
+ 
+# 主功能标签页 
+tab1, tab2, tab3 = st.tabs(["🔪  Enzyme digestion simulation", "🔮 Activity prediction", "🎨 Optimal enzyme combination screening"])
+ 
+# ====================== 酶切模拟模块 ======================
+with tab1:
+    st.subheader(" Protein virtual enzyme digestion simulator")
+    col1, col2 = st.columns([3,  1])
+    
+    with col1:
+        protein_seq = st.text_area( 
+            "Input the protein sequence (single-letter abbreviation)",
+            height=200,
+            placeholder="Eg: MALWMRLLPLLALLALW...",
+            key="protein_input"
+        ).upper()
+    
+    with col2:
+        st.markdown("###  Enzyme digestion parameters")
+        enzyme_options = platform.available_enzymes  
+        selected_enzymes = st.multiselect( 
+            "Selective proteases",
+            options=enzyme_options,
+            default=["Trypsin"],
+            help="Support multiple enzymatic digestion combinations"
+        )
+        
+        min_length = st.slider(" Minimum peptide length", 1, 20, 5)
+        max_length = st.slider(" Maximum peptide length", 5, 100, 50)
+        
+        if st.button(" Perform enzymatic digestion", use_container_width=True):
+            try:
+                with st.spinner(" In the process of enzymatic digestion..."):
+                    digest_result = platform.enzyme_digestion( 
+                        protein_seq,
+                        selected_enzymes 
+                    )
+                    
+                    # 过滤肽段长度 
+                    filtered_peptides = [
+                        p for p in digest_result['peptides'] 
+                        if min_length <= len(p) <= max_length 
+                    ]
+                    
+                    # 保存到会话状态 
+                    st.session_state.digest_result  = {
+                        "enzymes": selected_enzymes,
+                        "peptides": filtered_peptides,
+                        "stats": digest_result['peptide_statistics']
+                    }
+                    
+            except Exception as e:
+                st.error(f" Enzyme digestion failure: {str(e)}")
+ 
+    # 显示结果 
+    if 'digest_result' in st.session_state: 
+        st.success(" Enzymatic digestion completed!")
+        result = st.session_state.digest_result  
+        
+        # 统计信息 
+        with st.expander("📊  Statistical summary", expanded=True):
+            col_stat1, col_stat2, col_stat3 = st.columns(3) 
+            with col_stat1:
+                st.metric(" Total number of peptide segments", result['stats']['total_peptides'])
+            with col_stat2:
+                st.metric(" Average length", f"{result['stats']['average_peptide_length']:.1f} aa")
+            with col_stat3:
+                st.metric(" Longest peptide segment", f"{result['stats']['max_peptide_length']} aa")
+        
+        # 肽段列表 
+        st.markdown("###  Enzyme digestion products")
+        df = pd.DataFrame({
+            "Serial number": range(1, len(result['peptides'])+1),
+            "Peptide sequence": result['peptides'],
+            "Length": [len(p) for p in result['peptides']]
+        })
+        st.dataframe( 
+            df,
+            column_config={
+                "Serial number": st.column_config.NumberColumn(width="small"), 
+                "Peptide sequence": st.column_config.TextColumn(width="large"), 
+                "Length": st.column_config.ProgressColumn( 
+                    format="%d aa",
+                    min_value=min_length,
+                    max_value=max_length 
+                )
+            },
+            hide_index=True,
+            use_container_width=True 
+        )
+ 
+# ====================== 活性预测模块 ====================== 
+with tab2:
+    st.subheader(" Peptide activity prediction")
+    input_mode = st.radio( 
+        "Input source",
+        ["Manual input", "Use the enzymatic digestion results"],
+        horizontal=True,
+        help="The sequence can be manually entered or the previous enzymatic digestion products can be used"
+    )
+    
+    peptides = []
+    if input_mode == "Manual input":
+        seq_input = st.text_area( 
+            "Input the peptide sequence (separate multiple sequences with commas, and each peptide should not exceed 50 amino acids)",
+            height=100,
+            placeholder="Eg: ACDEFG, HIJKLMN...",
+            key="manual_input"
+        )
+        peptides = [s.strip().upper() for s in seq_input.split(",")  if s.strip()] 
+    else:
+        if 'digest_result' in st.session_state: 
+            peptides = st.session_state.digest_result['peptides'] 
+            st.info(f" The enzyme digestion products have been loaded : {len(peptides)} Peptide segments")
+        else:
+            st.warning(" Please complete the enzymatic digestion simulation to obtain the data first")
+
+    # 过滤掉长度超过50的肽段
+    long_peptides = [p for p in peptides if len(p) > 50]
+    peptides = [p for p in peptides if len(p) <= 50]
+
+    # 如果有被过滤的肽段，进行提示
+    if long_peptides:
+        st.warning(
+            f"{len(long_peptides)} peptide segments exceeding 50 amino acids have been detected and have been automatically ignored.\n\n"
+            f"The overlooked peptides are as follows: \n" + "\n".join(long_peptides)
+        )
+    
+    # 活性类型选择 
+    activity_options = platform.predictor.available_activities  
+    selected_activities = st.multiselect( 
+        "Select predictive activity types",
+        options=activity_options,
+        default=["ACE inhibitor", "antibacterial"],
+        help="Support multiple active types"
+    )
+    
+    if st.button(" Start the prediction", use_container_width=True) and peptides:
+        try:
+            with st.spinner(" The deep learning model is being invoked..."):
+                predictions = platform.predictor.predict( 
+                    peptides,
+                    selected_activities 
+                )
+                #st.write(f"预测结果: {predictions}")
+
+                # 构建结果表格 
+                results = []
+                for idx, (peptide, pred) in enumerate(zip(peptides, predictions)):
+                    row = {"Serial number": idx+1, "Peptide sequence": peptide, "Length": len(peptide)}
+                
+    
+                    if isinstance(pred, str):
+                        for activity, prob in predictions.items():
+                            row[activity] = f"{prob * 100:.1f}"
+                    elif isinstance(pred, dict):
+                        for activity, prob in pred.items():
+                            row[activity] = f"{prob * 100:.1f}"
+                #else:
+                    #st.warning(f"未识别的预测结果格式：{pred}")
+    
+                    results.append(row)
+
+                
+                df_pred = pd.DataFrame(results)
+                st.session_state.prediction_results  = df_pred 
+        
+        except Exception as e:
+            st.error(f" Prediction failed: {str(e)}")
+    
+    # 显示预测结果 
+    if 'prediction_results' in st.session_state: 
+        st.success(" The prediction is complete!")
+        df = st.session_state.prediction_results  
+        
+        # 交互式表格 
+        edited_df = st.data_editor( 
+            df,
+            column_config={
+                "The prediction is complete!": st.column_config.NumberColumn(width="small"), 
+                "Peptide sequence": st.column_config.TextColumn(width="large"), 
+                "Length": st.column_config.NumberColumn(width="small"), 
+                **{act: st.column_config.ProgressColumn( 
+                    label=act,
+                    format="%.1f%%",
+                    min_value=0.0,
+                    max_value=100.0 
+                ) for act in selected_activities}
+            },
+            hide_index=True,
+            use_container_width=True 
+        )
+        
+        # 结果下载 
+        csv = edited_df.to_csv(index=False).encode('utf-8') 
+        st.download_button( 
+            "Export the prediction results",
+            data=csv,
+            file_name=f"activity_pred_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv", 
+            mime="text/csv",
+            use_container_width=True 
+        )
+ 
+# ====================== 分子可视化模块 ======================
+with tab3: 
+
+ 
+    # 初始化页面配置  
+    st.title("🧬  Virtual enzyme digestion enzyme combination optimization system")   
+    
+ 
+# ====================== 参数配置 ======================  
+    with st.container(border=True):   
+        st.markdown(" ⚙️ Parameter configuration") 
+
+        # 使用列布局组织参数
+        col_param1, col_param2 = st.columns(2)
+
+        with col_param1:
+    # 酶选择器  
+            available_enzymes = platform.available_enzymes  
+            selected_enzymes = st.multiselect(   
+                "Selective protease:",  
+                options=available_enzymes,  
+                default=['Trypsin', 'Pepsin_1'],  
+                help="Support multiple selections. At least one enzyme should be chosen"  
+            )  
+ 
+    # 活性类型选择  
+            activity_options = platform.predictor.available_activities
+            target_activity = st.selectbox(   
+                "Target activity type:",  
+                options=activity_options,  
+                index=0  
+            )  
+
+        activity_thresholds = {
+            "ACE inhibitor": 0.76,
+            "antibacterial": 0.09,
+            "antioxidative": 0.66,
+            "dipeptidyl peptidase IV inhibitor": 0.71
+        }
+ 
+        with col_param2:
+            # 算法参数
+            with st.expander("Advanced algorithm parameters", expanded=True):
+                max_iter = st.slider(" Maximum number of iterations:", 100, 2000, 500, step=100)  
+                initial_temp = st.number_input(" Maximum number of iterations:", 50.0, 500.0, 100.0, step=10.0)  
+                cooling_rate = st.slider(" Cooling rate:", 0.8, 0.99, 0.95, step=0.01) 
+      
+            # 硬件选择  
+            device = st.radio(   
+                "Computing equipment:",  
+                ["cpu", "cuda"] if torch.cuda.is_available()  else ["cpu"],  
+                index=0 if not torch.cuda.is_available()  else 1  
+            )  
+ 
+# ====================== 主内容区 ======================  
+     
+ 
+# ---------------------- 蛋白质序列输入 ----------------------  
+    protein_seq = st.text_area(   
+        "Enter the protein sequence (single-letter amino acid code):",  
+        value="MKVLWAALLVTFLAGCQAKVEQAVETEPEPELRQQTEWQSGQRWELALGRFWDYLRWVQTLSEQVQEELLSSQVTQELRALMDETMKELKAYKSELEEQLTPVAEETRARLSKELQAAQARLGADVLASHGRLVQYRGEVQAMLGQSTEELRVRLASHLRKLRKRLLRDADDLQKRLAVYQAGAREGAERGLSAIRERLGPLVEQGRVRAATVGSLAGQPLQERAQAWGERLRARMEEMGSRTRDRLDEVKEQVAEVRAKLEEQAQQRLEEQLGMDTQKEIMDLQARKASIRAQDVHEPSEWRNRLLLLETQAGEGN",  
+        height=200,  
+        help="Only capital letters of the standard 20 amino acids (ACDEFGHIKLMNPQRSTVWY) are supported"  
+    )  
+    protein_name = st.text_area("Enter the name of the protein:")
+ 
+# ---------------------- 验证与启动 ----------------------  
+    if st.button("🚀  Start optimization", type="primary", use_container_width=True):  
+    # 输入校验  
+        if not selected_enzymes:  
+            st.error(" Please choose at least one protease!")  
+            st.stop()   
+ 
+        if not re.match("^[ACDEFGHIKLMNPQRSTVWY]+$",  protein_seq):  
+            st.error(" The protein sequence contains illegal characters!")  
+            st.stop() 
+
+        if not protein_name.strip():
+            protein_name = "unknown_protein"  
+ 
+    # 执行优化  
+        with st.spinner("⚡  Simulated annealing optimization is currently underway..."):  
+            progress_bar = st.progress(0)   
+            result = optimize_enzyme_combination(  
+                protein_sequence=protein_seq,  
+                target_activity=target_activity,  
+                available_enzymes=selected_enzymes,  
+                max_iterations=max_iter,  
+                initial_temp=initial_temp,  
+                cooling_rate=cooling_rate,  
+                device=device, 
+                activity_threshold = activity_thresholds.get(target_activity, 1.0)
+                #progress_callback=lambda x: progress_bar.progress(x)   
+            )  
+            # Export results to Excel and PDF  
+            excel_name = f"{protein_name}_{target_activity}.xlsx"
+            pdf_name = f"{protein_name}_{target_activity}.pdf"
+            excel_path, pdf_path = export_optimization_results(  
+                result=result,  
+                protein_sequence=protein_seq,
+                output_excel=excel_name,
+                output_pdf=pdf_name 
+            ) 
+
+            # 将结果存入 session_state
+            st.session_state['optimization_result'] = result
+            st.session_state['protein_seq'] = protein_seq
+ 
+        # 结果可视化
+    if 'optimization_result' in st.session_state:
+        result = st.session_state['optimization_result']
+        protein_seq = st.session_state['protein_seq']
+        analysis = result["analysis"]
+
+        threshold = activity_thresholds[target_activity]
+        summary_text = (
+            f"• Protein sequence length: {len(protein_seq)} Amino acids\n"
+            f"• Optimal fitness: {result['best_fitness']:.4f}\n"
+            f"• Optimal enzyme combination: {', '.join(result['best_enzymes'])}\n"
+            f"• The total number of peptide segments generated: {analysis['peptide_count']}\n"
+            f"• Number of effective peptide segments (length ≥2: {analysis['valid_peptide_count']}\n"
+            f"• Number of highly active peptide segments (activity ≥ ){threshold}): {analysis['high_activity_count']} "
+            f"({analysis['high_activity_percentage']:.1f}%)\n"
+            f"• Number of highly active peptide segments (activity ≥): {analysis['activity_stats']['mean']:.4f}\n"
+            f"• Optimization time consumption: {result['optimization_time']:.2f} 秒"
+        )
+
+        st.markdown("### 📄 Optimize summary statistics")
+        st.code(summary_text, language="markdown")
+        
+        st.subheader("📊  优化结果分析")  
+        col1, col2 = st.columns([0.3,  0.7])  
+ 
+        with col1:  
+            st.metric(" Optimal fitness", f"{result['best_fitness']:.4f}")  
+            st.metric(" Optimal fitness", result['analysis']['peptide_count'])  
+            st.metric(" The proportion of highly active peptides",  
+                     f"{result['analysis']['high_activity_percentage']:.1f}%")  
+ 
+        with col2:  
+            st.line_chart(   
+                pd.DataFrame(result['fitness_history'], columns=["Fitness Value"]),  
+                use_container_width=True  
+            )  
+ 
+        # 展示高活性肽段  
+        st.subheader("🔬  List of highly active peptides")  
+        high_activity_df = pd.DataFrame(  
+            result["analysis"]["high_activity_peptides"],  
+            columns=["Peptide sequence", "Predicted activity value"]  
+        )  
+        high_activity_df["Whether it exceeds the threshold"] = high_activity_df.apply(
+            lambda row: "✅ Yes" if row["Predicted activity value"] >= activity_thresholds.get(target_activity, 1.0) else "❌ No",
+            axis=1
+        )
+        st.dataframe(   
+            high_activity_df,  
+            column_config={  
+                "Predicted activity value": st.column_config.ProgressColumn(   
+                    format="%.3f",  
+                    min_value=0,  
+                    max_value=1.0  
+                )  
+            },  
+            hide_index=True  
+        )  
+
+        threshold = activity_thresholds[target_activity]
+        labels = ['Be active', 'No activity']
+        values = [
+            analysis['high_activity_count'],
+            analysis['valid_peptide_count'] - analysis['high_activity_count']
+        ]
+        
+        pie_data = pd.DataFrame({
+            'Category': labels,
+            'Count': values
+        })
+
+        pie_chart = alt.Chart(pie_data).mark_arc().encode(
+            theta='Count:Q',
+            color=alt.Color('Category:N', 
+                          scale=alt.Scale(range=['#006BA2', '#FF800E']),
+                          legend=alt.Legend(title="Active state")),
+            tooltip=['Category', 'Count']
+        ).properties(
+            width=200,
+            height=200,
+            title=f'Activity threshold: {threshold}'
+        )
+        
+        st.altair_chart(pie_chart, use_container_width=True)
+
+        if "score_distribution" in analysis:
+            st.subheader("📈 Distribution of activity scores")
+            
+            # 获取当前阈值
+            current_threshold = activity_thresholds.get(target_activity, 1.0)
+            
+            # 准备数据（保持不变）
+            score_ranges = list(analysis["score_distribution"].keys())
+            counts = list(analysis["score_distribution"].values())
+            
+            df = pd.DataFrame({
+                "score_range": score_ranges,
+                "count": counts,
+                "min_score": [float(x.split("-")[0]) for x in score_ranges],
+                "max_score": [float(x.split("-")[1]) for x in score_ranges]
+            })
+            
+            # 颜色计算（保持不变）
+            df["color"] = df.apply(lambda row: 
+                "#2ca02c" if row["min_score"] >= current_threshold else
+                "#ff7f0e" if row["min_score"] <= current_threshold <= row["max_score"] else
+                "#1f77b4", 
+                axis=1
+            )
+            
+            # 柱状图（保持不变）
+            base = alt.Chart(df).encode(
+                x=alt.X('score_range:N', 
+                    sort=alt.EncodingSortField(field='min_score', order='ascending'),
+                    title="Active range")
+            )
+            
+            bars = base.mark_bar().encode(
+                y=alt.Y('count:Q', title="Peptide number"),
+                color=alt.Color('color:N', scale=None),
+                tooltip=[
+                    alt.Tooltip('score_range:N', title="Active range"),
+                    alt.Tooltip('count:Q', title="Peptide number"),
+                    alt.Tooltip('min_score:Q', format=".2f", title="Interval minimum value"),
+                    alt.Tooltip('max_score:Q', format=".2f", title="Maximum value of the interval")
+                ]
+            )
+            
+            # 修改阈值线部分：添加x轴范围限制
+            threshold_line = alt.Chart(pd.DataFrame({'threshold': [current_threshold]}))\
+                .mark_rule(color='red', strokeWidth=2, strokeDash=[5,5])\
+                .encode(
+                    x=alt.X('threshold:Q', 
+                            scale=alt.Scale(domain=[0, 1]),  # 固定x轴范围为0-1
+                            title="Activity threshold")
+                )
+            
+            # 组合图表（保持不变）
+            chart = alt.layer(
+                bars,
+                threshold_line
+            ).resolve_scale(
+                x='independent'
+            ).properties(
+                width=700,
+                height=400
+            )
+            
+            # 图例（保持不变）
+            legend_df = pd.DataFrame({
+                "type": ["Activity threshold", "Threshold boundary interval", "Low activity range"],
+                "color": ["#2ca02c", "#ff7f0e", "#1f77b4"]
+            })
+            legend = alt.Chart(legend_df).mark_rect(size=50).encode(
+                y=alt.Y('type:N', axis=alt.Axis(orient='right', title=None)),
+                color=alt.Color('color:N', scale=None, legend=None)
+            )
+            
+            st.altair_chart(alt.hconcat(chart, legend))
+
+        if "length_distribution" in analysis:
+            st.subheader("Peptide length distribution")
+            length_df = pd.DataFrame({
+                "Peptide length": list(analysis["length_distribution"].keys()),
+                "Quantity": list(analysis["length_distribution"].values())
+            })
+            st.bar_chart(length_df.set_index("Peptide length"))
+
+        if "aa_composition" in analysis and analysis["aa_composition"]:
+            st.subheader("Amino acid composition ratio")
+            aa_df = pd.DataFrame({
+                "Amino acid": list(analysis["aa_composition"].keys()),
+                "Proportion": list(analysis["aa_composition"].values())
+            }).sort_values(by="Proportion", ascending=False)
+            st.bar_chart(aa_df.set_index("Amino acid"))
+
+        if "best_enzymes" in result:
+            st.subheader("Optimal enzyme combination")
+            st.markdown("、".join(result["best_enzymes"]))
+ 
+
+# ====================== 安全验证 ======================
+# 在关闭前添加确认对话框
+if "confirm_shutdown" not in st.session_state:
+    st.session_state.confirm_shutdown = False
+
+if st.session_state.confirm_shutdown:
+    st.warning("Are you sure you want to close the application? This operation is irreversible!")
+    if st.button("✅ Confirm closure"):
+        shutdown_app()
+    if st.button("❌ Unclose"):
+        st.session_state.confirm_shutdown = False
+
+st.markdown("---") 
+st.caption(f" System Time: 10:32 on May 24, 2025 Platform version: v3.2.2025")
